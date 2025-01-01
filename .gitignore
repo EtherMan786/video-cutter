@@ -2,8 +2,8 @@
 node_modules/
 
 # Ignore uploaded and output files
-# uploads/
-# output/
+uploads/
+output/
 
 # Ignore logs
 *.log
