@@ -9,7 +9,7 @@ const html = `
   </head>
   <body>
     <h1>Video Splitter</h1>
-    <form id="uploadForm">
+    <form id="uploadForm" enctype="multipart/form-data" method="post" action="/upload">
       <label for="video">Upload Video:</label>
       <input type="file" id="video" name="video" accept="video/*" required />
       <label for="divisions">Number of Divisions:</label>
@@ -17,6 +17,7 @@ const html = `
       <button type="submit">Upload and Split</button>
     </form>
     <div id="status"></div>
+    <div id="downloads"></div>
   </body>
   </html>
 `;
@@ -41,6 +42,7 @@ app.post('/upload', upload.single('video'), (req, res) => {
   const videoPath = req.file.path;
   const outputDir = path.join(__dirname, 'output');
   const numberOfDivisions = parseInt(req.body.divisions, 10);
+  const downloadLinks = [];
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir);
@@ -55,25 +57,42 @@ app.post('/upload', upload.single('video'), (req, res) => {
     const duration = metadata.format.duration;
     const segmentDuration = duration / numberOfDivisions;
 
+    let completed = 0;
+
     // Split video
     for (let i = 0; i < numberOfDivisions; i++) {
       const startTime = segmentDuration * i;
-      const outputFileName = path.join(outputDir, `segment_${i + 1}.mp4`);
+      const outputFileName = `segment_${i + 1}.mp4`;
+      const outputPath = path.join(outputDir, outputFileName);
 
       ffmpeg(videoPath)
         .setStartTime(startTime)
         .setDuration(segmentDuration)
-        .output(outputFileName)
+        .output(outputPath)
         .on('end', () => {
-          console.log(`Segment ${i + 1} created.`);
+          downloadLinks.push(`<a href="/download/${outputFileName}" download>${outputFileName}</a>`);
+          completed++;
+          if (completed === numberOfDivisions) {
+            res.send(`Video uploaded and processed. Download your segments below:<br>${downloadLinks.join('<br>')}`);
+          }
         })
         .on('error', (error) => {
           console.error(`Error creating segment ${i + 1}:`, error);
         })
         .run();
     }
+  });
+});
 
-    res.send('Video uploaded and processing started. Check the output directory.');
+// Serve output files for download
+app.get('/download/:file', (req, res) => {
+  const file = req.params.file;
+  const filePath = path.join(__dirname, 'output', file);
+  res.download(filePath, (err) => {
+    if (err) {
+      console.error(`Error sending file: ${err}`);
+      res.status(500).send('Error downloading file.');
+    }
   });
 });
 
